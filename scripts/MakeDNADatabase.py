@@ -2,6 +2,7 @@
 # This script will make a training database of hashes
 import os
 import sys
+import math
 import requests
 # The following is for ease of development (so I don't need to keep re-installing the tool)
 try:
@@ -103,17 +104,21 @@ def main():
 			else:
 				chunks[i*chunk_size:(i+1)*chunk_size]
 
-		genome_skethches = []
-		for chunk in chunks:
+
+		genome_sketches = []
+		for idx, chunk in enumerate(chunks):
+			print("Beginning download of chunk %i of %i"%(idx, len(chunks)))
 			file_names = []
 			for line in chunk:
 				file = stream_file(line.strip())
 				file_names.append(file)
+			print("starting sketches")
 
 			pool = Pool(processes=num_threads)
 			curr_genome_sketches = pool.map(make_minhash_start, zip(file_names, repeat(max_h), repeat(prime), repeat(ksize)))
 			genome_sketches += curr_genome_sketches
 
+			print("removing fasta files")
 			for file_name in file_names:
 				os.remove(file_name)
 
@@ -130,7 +135,7 @@ def main():
 		# Open the pool and make the sketches
 		pool = Pool(processes=num_threads)
 		genome_sketches = pool.map(make_minhash_star, zip(file_names, repeat(max_h), repeat(prime), repeat(ksize)))
-
+	print("Beginning export to one HDF5 file")
 	# Export all the sketches
 	MH.export_multiple_to_single_hdf5(genome_sketches, out_file)
 
