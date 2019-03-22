@@ -6,6 +6,10 @@ CMash is a fast and accurate way to estimate the similarity of two sets. This is
 
 # Be aware, this is a work in progress and isn't guaranteed to be functional
 
+### changes from dkoslicki's implementation of MakeDNADatabase.py
+changing how MakeDNADatabase.py works to include an option to download and stream data in chunks to reduce the disk space load
+
+
 ## Installation
 The easiest way to install this is to use [virtualenv](https://virtualenv.pypa.io/en/stable/):
 ```bash

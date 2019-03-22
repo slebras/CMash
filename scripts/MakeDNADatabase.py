@@ -2,6 +2,7 @@
 # This script will make a training database of hashes
 import os
 import sys
+import requests
 # The following is for ease of development (so I don't need to keep re-installing the tool)
 try:
 	from CMash import MinHash as MH
@@ -16,7 +17,9 @@ import multiprocessing
 from itertools import *
 import argparse
 import khmer
-from khmer.khmer_args import optimal_size
+import gzip
+import shutil
+from khmer.khmer_args import optimal_size\
 
 # This function will make a single min hash sketch upon being given a file name, sketch size, prime, and k-mer size
 def make_minhash(genome, max_h, prime, ksize):
@@ -34,6 +37,28 @@ def make_minhash_star(arg):
 	return make_minhash(*arg)
 
 
+def stream_file(url):
+	resp = requests.get(url, stream=True)
+	if resp.status_code == requests.codes.ok:
+		file_path = "fastas/"+ url.split("/")[-1]
+
+		# stream file from response object
+		with open(file_path, "ab") as fd:
+			for chunk in resp.iter_content(chunk_size=2048):
+				fd.write(chunk)
+
+		# unzip the fasta file
+		with gzip.open(file_path, "rb") as f_in:
+			with open(file_path[:-6], "wb") as f_out:
+				shutil.copyfileobj(f_in, f_out)
+
+		os.remove(file_path)
+	else:
+		raise Exception("Request for %s finished with error"%url)
+
+	return file_path[:-6]
+
+
 def main():
 	parser = argparse.ArgumentParser(description="This script creates training/reference sketches for each FASTA/Q file"
 									" listed in the input file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -44,6 +69,10 @@ def main():
 	parser.add_argument('-i', '--intersect_nodegraph', action="store_true",
 						help="Optional flag to export Nodegraph file (bloom filter) containing all k-mers in the"
 							 " training database. Saved in same location as out_file. This is to be used with QueryDNADatabase.py")
+	# adding new parser argument to handle 
+	parser.add_argument('-s', '--data_stream', action="store_true", 
+						help="Optional flag to define whether the input_files are urls to stream data instead of"
+						     " absolute paths to files.", default=False)
 	parser.add_argument('in_file', help="Input file: file containing (absolute) file names of training genomes.")
 	parser.add_argument('out_file', help='Output training database/reference file (in HDF5 format)')
 	args = parser.parse_args()
@@ -62,18 +91,45 @@ def main():
 	else:
 		intersect_nodegraph_file = None
 
-	file_names = list()
-	fid = open(input_file_names, 'r')
-	for line in fid.readlines():
-		line = line.strip()
-		if not os.path.exists(line):
-			raise Exception("Training genome %s does not exist." % line)
-		file_names.append(line)
-	fid.close()
+	# adding new
+	if args.data_stream is True:
+		chunk_size = 40
+		with open(input_file_names, 'r') as fid:
+			lines = fid.readlines()
+		chunks = []
+		for i in range(int(math.ceil(len(lines) / chunk_size))):
+			if (i+1)*chunk_size > len(lines)-1:
+				chunks[i*chunk_size:len(lines)]
+			else:
+				chunks[i*chunk_size:(i+1)*chunk_size]
 
-	# Open the pool and make the sketches
-	pool = Pool(processes=num_threads)
-	genome_sketches = pool.map(make_minhash_star, zip(file_names, repeat(max_h), repeat(prime), repeat(ksize)))
+		genome_skethches = []
+		for chunk in chunks:
+			file_names = []
+			for line in chunk:
+				file = stream_file(line.strip())
+				file_names.append(file)
+
+			pool = Pool(processes=num_threads)
+			curr_genome_sketches = pool.map(make_minhash_start, zip(file_names, repeat(max_h), repeat(prime), repeat(ksize)))
+			genome_sketches += curr_genome_sketches
+
+			for file_name in file_names:
+				os.remove(file_name)
+
+	else:
+		file_names = list()
+		fid = open(input_file_names, 'r')
+		for line in fid.readlines():
+			line = line.strip()
+			if not os.path.exists(line):
+				raise Exception("Training genome %s does not exist." % line)
+			file_names.append(line)
+		fid.close()
+
+		# Open the pool and make the sketches
+		pool = Pool(processes=num_threads)
+		genome_sketches = pool.map(make_minhash_star, zip(file_names, repeat(max_h), repeat(prime), repeat(ksize)))
 
 	# Export all the sketches
 	MH.export_multiple_to_single_hdf5(genome_sketches, out_file)
