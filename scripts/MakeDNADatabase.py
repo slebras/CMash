@@ -60,6 +60,13 @@ def stream_file(url):
 	return file_path[:-6]
 
 
+def unzip_file(file_path, temp_path):
+	fasta_path = os.path.join(temp_path, file_path[:-6].split('/')[-1])
+	with gzip.open(file_path, 'rb') as f_in:
+		with open(fasta_path, "wb") as f_out:
+			shutil.copyfileobj(f_in, f_out)
+	return fasta_path
+
 def main():
 	parser = argparse.ArgumentParser(description="This script creates training/reference sketches for each FASTA/Q file"
 									" listed in the input file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -74,6 +81,9 @@ def main():
 	parser.add_argument('-s', '--data_stream', action="store_true", 
 						help="Optional flag to define whether the input_files are urls to stream data instead of"
 						     " absolute paths to files.", default=False)
+	parser.add_argument('-z', '--unzip_data', action="store_true",
+						help="Optional flag to define whether the input_files are gzipped. if True, will unzip in "
+							 "chunks and delete unzipped fastas after use", default=False)
 	parser.add_argument('in_file', help="Input file: file containing (absolute) file names of training genomes.")
 	parser.add_argument('out_file', help='Output training database/reference file (in HDF5 format)')
 	args = parser.parse_args()
@@ -92,8 +102,10 @@ def main():
 	else:
 		intersect_nodegraph_file = None
 
-	# adding new
-	if args.data_stream is True:
+	if args.unzip_data is True and args.data_stream is True:
+		raise InputError("unzip_data and data_stream flags cannot both be specified.")
+
+	if args.unzip_data is True or args.data_stream is True:
 		chunk_size = 40
 		with open(input_file_names, 'r') as fid:
 			lines = fid.readlines()
@@ -104,8 +116,31 @@ def main():
 			else:
 				chunks[i*chunk_size:(i+1)*chunk_size]
 
+	genome_sketches = []
 
-		genome_sketches = []
+	if args.unzip_data is True:
+		temp_path = os.path.join(os.getcwd(), "temp")
+		os.mkdir(temp_path)
+
+		for idx, chunk in enumerate(chunks):
+			print("Beginning download of chunk %i of %i"%(idx, len(chunks)))
+			file_names = []
+			for line in chunk:
+				file = unzip_file(line, temp_path)
+				file_names.append(file)
+			print("starting sketches")
+
+			pool = Pool(processes=num_threads)
+			curr_genome_sketches = pool.map(make_minhash_start, zip(file_names, repeat(max_h), repeat(prime), repeat(ksize)))
+			genome_sketches += curr_genome_sketches
+
+			print("removing fasta files")
+			for file_name in file_names:
+				os.remove(file_name)
+
+	# adding new
+	elif args.data_stream is True:
+
 		for idx, chunk in enumerate(chunks):
 			print("Beginning download of chunk %i of %i"%(idx, len(chunks)))
 			file_names = []
