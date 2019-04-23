@@ -507,17 +507,35 @@ def insert_to_database(database_location, insert_list):
     fid.close()
 
 
-def union_databases(database1_file_name, database2_file_name, out_file):
+def union_databases(database_filenames, out_file):
     """
     This funtion will union the two training databases and export to the specified HDF5 file.
-    :param database1_file_name: Input HDF5 file of one of the input databases.
-    :param database2_file_name: Input HDF5 file of the other input database.
+    :param database_filenames: list of Input HDF5 files of the input databases
+       deleted --- :param database1_file_name: Input HDF5 file of one of the input databases.
+       deleted --- :param database2_file_name: Input HDF5 file of the other input database.
     :param out_file: File name for the exported HDF5 file
     :return: None
     """
     out_file = os.path.abspath(out_file)
-    database1_file_name = os.path.abspath(database1_file_name)
-    database2_file_name = os.path.abspath(database2_file_name)
+    # database1_file_name = os.path.abspath(database1_file_name)
+    # database2_file_name = os.path.abspath(database2_file_name)
+    if len(database_filenames) < 2:
+        raise Exception("More than one database must be specified when using union_databases function")
+    # new stuff below
+    database_filenames = [os.path.abspath(database_filename) for database_filename in database_filenames]
+    pool = Pool(processes=num_threads)
+    CEs = pool.map(import_multiple_from_single_hdf5, database_filenames)
+    # sanity check the existing databases
+    if len(set().union(*[[item.ksize for item in CE] for CE in CEs])) > 1:
+        raise Exception("Incompatible k-mer lengths.")
+    if len(set().union(*[[item.p for item in CE] for CE in CEs])) > 1:
+        raise Exception("Incompatible primes, Re-run iwth same -p value for both databases")
+    all_CEs = list(set().union(*CEs))
+    all_input_names = set().union(*[[item.input_file_name for item in CE] for CE in CEs])
+
+    # new stuff above
+
+    '''
     # Read in the existing database
     CEs1 = import_multiple_from_single_hdf5(database1_file_name)
     CEs2 = import_multiple_from_single_hdf5(database2_file_name)
@@ -532,6 +550,7 @@ def union_databases(database1_file_name, database2_file_name, out_file):
         set([os.path.basename(item.input_file_name) for item in CEs2]))
     # For some odd reason, even if the data is identical, it's identifying the same CEs (loaded from different sources) as the same
     # so instead, let's just pick one of them to include
+    '''
     included_names = set()
     to_include_CEs = list()
     for CE in all_CEs:
@@ -1126,7 +1145,7 @@ def test_union_databases():
     export_multiple_to_single_hdf5([CE1], temp_file1)
     export_multiple_to_single_hdf5([CE1, CE2, CE3], temp_file2)
     try:
-        union_databases(temp_file1, temp_file2, temp_file3)
+        union_databases([temp_file1, temp_file2], temp_file3)
     except:
         raise Exception("Unioning databases test did not succeed")
     all_3 = import_multiple_from_single_hdf5(temp_file3)
