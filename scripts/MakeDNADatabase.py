@@ -3,7 +3,6 @@
 import os
 import sys
 import math
-import pickle
 import requests
 # The following is for ease of development (so I don't need to keep re-installing the tool)
 try:
@@ -62,11 +61,13 @@ def stream_file(url):
 
 
 def unzip_file(file_path, temp_path):
+    print("Unzipping %s to %s" % (file_path, temp_path))
     fasta_path = os.path.join(temp_path, file_path[:-6].split('/')[-1])
     with gzip.open(file_path, 'rb') as f_in:
         with open(fasta_path, "wb") as f_out:
             shutil.copyfileobj(f_in, f_out)
     return fasta_path
+
 
 def main():
     parser = argparse.ArgumentParser(description="This script creates training/reference sketches for each FASTA/Q file"
@@ -114,7 +115,7 @@ def main():
         raise InputError("unzip_data and data_stream flags cannot both be specified.")
 
     if args.unzip_data is True or args.data_stream is True:
-        chunk_size = 40
+        chunk_size = 75
         with open(input_file_names, 'r') as fid:
             lines = fid.readlines()
         chunks = []
@@ -128,23 +129,24 @@ def main():
 
     temp_path = args.temp_dir
     if args.unzip_data:
+        print("Beginning unzipping data")
         if not os.path.isdir(os.path.join(temp_path, "fastas")):
             os.mkdir(os.path.join(temp_path, "fastas"))
         for idx, chunk in enumerate(chunks):
             print("Beginning download of chunk %i of %i"%(idx, len(chunks)))
             file_names = []
             for line in chunk:
-                if not check_if_pickled(line):
-                    f = unzip_file(line, os.path.join(temp_path, "fastas"))
-                    file_names.append(f)
+                f = unzip_file(line, os.path.join(temp_path, "fastas"))
+                file_names.append(f)
+                # if not check_if_pickled(line):
+                #     f = unzip_file(line, os.path.join(temp_path, "fastas"))
+                #     file_names.append(f)
 
             if len(file_names) > 0:
                 print("starting sketches")
                 pool = Pool(processes=num_threads)
                 curr_genome_sketches = pool.map(make_minhash_start, zip(file_names, repeat(max_h), repeat(prime), repeat(ksize)))
                 genome_sketches += curr_genome_sketches
-
-                pickle_sketches(curr_genome_sketches, temp_path)
 
                 print("removing fasta files")
                 for file_name in file_names:
@@ -153,7 +155,7 @@ def main():
                 print("pickled files found, continuing...")
 
     # adding new
-    elif args.data_stream is True:
+    elif args.data_stream:
 
         for idx, chunk in enumerate(chunks):
             print("Beginning download of chunk %i of %i"%(idx, len(chunks)))
