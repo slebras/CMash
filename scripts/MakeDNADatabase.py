@@ -115,21 +115,27 @@ def main():
         raise InputError("unzip_data and data_stream flags cannot both be specified.")
 
     if args.unzip_data is True or args.data_stream is True:
-        chunk_size = 75
         with open(input_file_names, 'r') as fid:
             lines = fid.readlines()
-        chunks = []
-        for i in range(int(math.ceil(len(lines) / chunk_size))):
-            if (i+1)*chunk_size > len(lines)-1:
-                chunks[i*chunk_size:len(lines)]
-            else:
-                chunks[i*chunk_size:(i+1)*chunk_size]
+        lines = [l.strip() for l in lines]
+        # just do everything in one chunk
+        chunks = [lines]
+        # chunk_size = 75
+        # with open(input_file_names, 'r') as fid:
+        #     lines = fid.readlines()
+        # chunks = []
+        # for i in range(int(math.ceil(len(lines) / chunk_size))):
+        #     if (i+1)*chunk_size > len(lines)-1:
+        #         chunks[i*chunk_size:len(lines)]
+        #     else:
+        #         chunks[i*chunk_size:(i+1)*chunk_size]
 
     genome_sketches = []
 
     temp_path = args.temp_dir
     if args.unzip_data:
         print("Beginning unzipping data")
+        print(chunks)
         if not os.path.isdir(os.path.join(temp_path, "fastas")):
             os.mkdir(os.path.join(temp_path, "fastas"))
         for idx, chunk in enumerate(chunks):
@@ -145,7 +151,7 @@ def main():
             if len(file_names) > 0:
                 print("starting sketches")
                 pool = Pool(processes=num_threads)
-                curr_genome_sketches = pool.map(make_minhash_start, zip(file_names, repeat(max_h), repeat(prime), repeat(ksize)))
+                curr_genome_sketches = pool.map(make_minhash_star, zip(file_names, repeat(max_h), repeat(prime), repeat(ksize)))
                 genome_sketches += curr_genome_sketches
 
                 print("removing fasta files")
@@ -166,7 +172,7 @@ def main():
             print("starting sketches")
 
             pool = Pool(processes=num_threads)
-            curr_genome_sketches = pool.map(make_minhash_start, zip(file_names, repeat(max_h), repeat(prime), repeat(ksize)))
+            curr_genome_sketches = pool.map(make_minhash_star, zip(file_names, repeat(max_h), repeat(prime), repeat(ksize)))
             genome_sketches += curr_genome_sketches
 
             print("removing fasta files")
