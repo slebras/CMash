@@ -79,7 +79,7 @@ def main():
                         help="Optional flag to export Nodegraph file (bloom filter) containing all k-mers in the" \
                              " training database. Saved in same location as out_file. This is to be used with QueryDNADatabase.py")
     # adding new parser argument to handle
-    parser.add_argument('-t', '--temp_dir', type=str, help="temporary storage directory (define for continue flag)", default="./temp")
+    parser.add_argument('-d', '--temp_dir', type=str, help="temporary storage directory (define for continue flag)", default="./temp")
     parser.add_argument('-s', '--data_stream', action="store_true", \
                         help="Optional flag to define whether the input_files are urls to stream data instead of" \
                              " absolute paths to files.", default=False)
